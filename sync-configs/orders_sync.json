@@ -1,0 +1,37 @@
+{
+  "name": "OrdersSync",
+  "sync_id": "orders_sync",
+  "version": "1.0.0",
+  "description": "Append-only capture of order events. Orders are immutable once inserted so append_only is safe.",
+
+  "source": {
+    "type": "postgres",
+    "connection": {
+      "host_env": "SOURCE_PG_HOST",
+      "port_env": "SOURCE_PG_PORT",
+      "database_env": "SOURCE_PG_DB",
+      "user_env": "SOURCE_PG_USER",
+      "password_env": "SOURCE_PG_PASSWORD"
+    },
+    "schema": "public",
+    "table": "orders",
+    "columns": ["id", "user_id", "amount_cents", "status", "created_at"],
+    "primary_key": ["id"],
+    "incremental_column": "id",
+    "incremental_column_type": "long"
+  },
+
+  "mode": "append_only",
+
+  "warehouse": {
+    "table_name": "warehouse.public_orders",
+    "target_catalog": "iceberg",
+    "partition_by": [],
+    "sort_by": ["created_at"]
+  },
+
+  "schedule": {
+    "cadence": "1m",
+    "batch_size": 5000
+  }
+}

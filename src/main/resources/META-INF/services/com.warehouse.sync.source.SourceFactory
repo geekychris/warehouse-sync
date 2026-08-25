@@ -1,0 +1,3 @@
+com.warehouse.sync.source.postgres.PostgresSourceFactory
+com.warehouse.sync.source.mysql.MySqlSourceFactory
+com.warehouse.sync.source.debezium.DebeziumKafkaSourceFactory

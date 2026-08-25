@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "warehouse-sync SyncConfig",
+  "description": "Bundled copy of config-schema/sync-config-schema.json — loaded from the classpath by ConfigLoader so that validate-config works from the fat jar without needing the source tree.",
+  "type": "object",
+  "required": ["name", "sync_id", "version", "source", "mode", "warehouse", "schedule"],
+  "additionalProperties": false,
+  "properties": {
+    "name": { "type": "string" },
+    "sync_id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "description": { "type": "string" },
+
+    "source": {
+      "type": "object",
+      "required": ["type", "table"],
+      "properties": {
+        "type": { "type": "string" },
+        "connection": { "type": "object", "additionalProperties": true },
+        "schema": { "type": "string" },
+        "table": { "type": "string" },
+        "columns": { "type": "array", "items": { "type": "string" } },
+        "primary_key": { "type": "array", "items": { "type": "string" } },
+        "incremental_column": { "type": "string" },
+        "incremental_column_type": {
+          "type": "string",
+          "enum": ["timestamp", "long", "int", "date", "string"]
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "mode": { "type": "string", "enum": ["append_only", "merge", "full_replace"] },
+
+    "warehouse": {
+      "type": "object",
+      "required": ["table_name"],
+      "properties": {
+        "table_name": { "type": "string" },
+        "target_catalog": { "type": "string" },
+        "partition_by": { "type": "array", "items": { "type": "string" } },
+        "sort_by": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+
+    "schedule": {
+      "type": "object",
+      "required": ["cadence", "batch_size"],
+      "properties": {
+        "cadence": { "type": "string", "pattern": "^[0-9]+(s|m|h|d)$" },
+        "batch_size": { "type": "integer", "minimum": 1 },
+        "full_refresh_cadence": { "type": "string", "pattern": "^[0-9]+(s|m|h|d)$" },
+        "watermark_lag_seconds": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "warehouse_name": { "type": "string" },
+          "type": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    }
+  }
+}

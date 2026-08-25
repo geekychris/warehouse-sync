@@ -1,0 +1,50 @@
+# Port-override for the shared spark_minio_trino lakehouse + a demo Postgres
+# 'source' database that this project syncs FROM (distinct from the Hive
+# metastore backing store at 15432).
+#
+# Bring up (from this directory):
+#   docker compose -f ../spark_minio_trino/docker-compose.yml \
+#                  -f docker-compose.yml \
+#                  -f lakehouse-override.yml \
+#                  up -d
+#
+# Same port discipline as structured-logger (18000-range coordinated with
+# devportal). The one new addition is 15433 for the source Postgres — we
+# CANNOT reuse 15432 because that is claimed by the Hive metastore Postgres.
+#
+# Host port map after this override:
+#   18000  → MinIO API           (container 9000)
+#   18001  → MinIO console       (container 9001)
+#   18013  → Trino UI/API        (container 8080)
+#   18077  → Spark master        (container 7077)
+#   18082  → Spark UI            (container 8080)
+#   18083  → Hive Metastore      (container 9083)
+#   15432  → metastore Postgres  (container 5432)   — DO NOT SYNC FROM THIS
+#   15433  → source Postgres     (container 5432)   — this is what we replicate
+
+services:
+  minio:
+    ports:
+      - "18000:9000"
+      - "18001:9001"
+
+  postgres:
+    ports:
+      - "15432:5432"
+
+  hive-metastore:
+    ports:
+      - "18083:9083"
+
+  spark-master:
+    ports:
+      - "18082:8080"
+      - "18077:7077"
+
+  trino:
+    ports:
+      - "18013:8080"
+
+  source-postgres:
+    ports:
+      - "15433:5432"

@@ -1,0 +1,40 @@
+{
+  "name": "UsersSync",
+  "sync_id": "users_sync",
+  "version": "1.0.0",
+  "description": "Incremental sync of public.users from the demo Postgres source into the warehouse.",
+
+  "source": {
+    "type": "postgres",
+    "connection": {
+      "host_env": "SOURCE_PG_HOST",
+      "port_env": "SOURCE_PG_PORT",
+      "database_env": "SOURCE_PG_DB",
+      "user_env": "SOURCE_PG_USER",
+      "password_env": "SOURCE_PG_PASSWORD",
+      "sslmode": "prefer"
+    },
+    "schema": "public",
+    "table": "users",
+    "columns": ["id", "email", "display_name", "created_at", "updated_at"],
+    "primary_key": ["id"],
+    "incremental_column": "updated_at",
+    "incremental_column_type": "timestamp"
+  },
+
+  "mode": "merge",
+
+  "warehouse": {
+    "table_name": "warehouse.public_users",
+    "target_catalog": "iceberg",
+    "partition_by": [],
+    "sort_by": ["id"]
+  },
+
+  "schedule": {
+    "cadence": "5m",
+    "batch_size": 10000,
+    "full_refresh_cadence": "24h",
+    "watermark_lag_seconds": 5
+  }
+}

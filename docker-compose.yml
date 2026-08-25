@@ -1,0 +1,41 @@
+# warehouse-sync — extends the shared ../spark_minio_trino stack with a
+# demo *source* Postgres that this project replicates rows FROM.
+#
+# The metastore Postgres already in spark_minio_trino is intentionally NOT
+# reused — mixing metastore state with sync-source data would make demos
+# and tests confusing. This container is a separate instance on a separate
+# host port (15433 after the override).
+#
+# Bring the full stack up:
+#   docker compose -f ../spark_minio_trino/docker-compose.yml \
+#                  -f docker-compose.yml \
+#                  -f lakehouse-override.yml \
+#                  up -d
+
+services:
+  source-postgres:
+    image: postgres:15
+    container_name: source-postgres
+    environment:
+      - POSTGRES_USER=sync
+      - POSTGRES_PASSWORD=sync
+      - POSTGRES_DB=source
+    ports:
+      - "5433:5432"  # default (no-override) mapping; the override renames to 15433
+    volumes:
+      - source-postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-source-postgres.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    networks:
+      - lakehouse-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sync -d source"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  source-postgres-data:
+
+networks:
+  lakehouse-network:
+    external: true
