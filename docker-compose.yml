@@ -24,7 +24,12 @@ services:
       - "5433:5432"  # default (no-override) mapping; the override renames to 15433
     volumes:
       - source-postgres-data:/var/lib/postgresql/data
-      - ./scripts/init-source-postgres.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+      # ${PWD} anchors the mount to warehouse-sync/ regardless of which compose
+      # file docker resolves relative paths against (it uses the FIRST -f's
+      # directory, which changes when the base spark_minio_trino compose is
+      # listed first). Scripts always cd to the project dir before invoking
+      # docker compose.
+      - ${PWD}/scripts/init-source-postgres.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
     networks:
       - lakehouse-network
     healthcheck:
@@ -36,6 +41,8 @@ services:
 volumes:
   source-postgres-data:
 
+# The base spark_minio_trino compose declares this network with driver=bridge;
+# marking it external here would fight that. Leaving it undeclared makes
+# docker-compose use whatever the merged declaration says.
 networks:
-  lakehouse-network:
-    external: true
+  lakehouse-network: {}

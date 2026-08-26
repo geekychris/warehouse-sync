@@ -31,6 +31,11 @@ public final class SparkSessionFactory {
         SparkSession spark = SparkSession.builder()
                 .appName(appName)
                 .master(env("WAREHOUSE_SYNC_SPARK_MASTER", "local[*]"))
+                // Pin session timezone to UTC. The JDBC datasource propagates the
+                // Spark session timezone to the source Postgres via SET TIME ZONE;
+                // Postgres rejects Java-style zone names like "US/Pacific", so we
+                // sidestep by staying in UTC.
+                .config("spark.sql.session.timeZone", "UTC")
                 .config("spark.sql.extensions",
                         "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
                 .config("spark.sql.catalog." + catalog,
@@ -38,8 +43,8 @@ public final class SparkSessionFactory {
                 .config("spark.sql.catalog." + catalog + ".type", "hive")
                 .config("spark.sql.catalog." + catalog + ".uri", metastoreUri)
                 .config("spark.sql.catalog." + catalog + ".warehouse", warehousePath)
-                .config("spark.sql.catalog." + catalog + ".io-impl",
-                        "org.apache.iceberg.aws.s3.S3FileIO")
+                // Default HadoopFileIO uses fs.s3a.* config below — fine against MinIO
+                // and doesn't need the AWS SDK v2 that S3FileIO would drag in.
                 .config("spark.hadoop.fs.s3a.endpoint", s3Endpoint)
                 .config("spark.hadoop.fs.s3a.access.key", s3AccessKey)
                 .config("spark.hadoop.fs.s3a.secret.key", s3SecretKey)

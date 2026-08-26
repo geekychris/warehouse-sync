@@ -61,7 +61,11 @@ public class PostgresSource implements Source {
             next = previousWatermark;
         } else {
             String incrCol = src.getIncrementalColumn();
-            Row maxRow = rows.selectExpr("max(" + quoteIdent(incrCol) + ") AS max_v").first();
+            // Spark SQL uses backticks for identifier quoting, not the double-quotes
+            // that quoteIdent() emits for Postgres. Passing "updated_at" to selectExpr
+            // is a string literal, not the column — max of a constant returns the
+            // constant, and we'd persist "updated_at" as the watermark. Backticks.
+            Row maxRow = rows.selectExpr("max(`" + incrCol.replace("`", "``") + "`) AS max_v").first();
             Object raw = maxRow.isNullAt(0) ? null : maxRow.get(0);
             next = raw == null ? previousWatermark
                     : Watermark.fromRaw(src.getIncrementalColumnType(), raw);

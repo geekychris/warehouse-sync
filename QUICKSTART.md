@@ -97,7 +97,10 @@ Runs steps 1 through 8 in sequence.
 
 ## Troubleshooting
 
-- **`ERROR StatusLogger Unrecognized format specifier`** — cosmetic. Spark bundles log4j 1.x alongside our log4j 2 config. Ignore.
-- **Testcontainers `client version 1.32 is too old`** — you're on Rancher Desktop. `export DOCKER_HOST=unix:///Users/$USER/.rd/docker.sock` and re-run.
-- **`spark_minio_trino` not found** — set `export SPARK_MINIO_TRINO_DIR=/path/to/spark_minio_trino`.
-- **Trino says table doesn't exist** — check that `warehouse-sync run` actually returned `status=OK`; a `NOOP` means no source rows since the last watermark.
+- **`ERROR StatusLogger Unrecognized format specifier`** — cosmetic. Spark bundles a log4j 1.x pattern that our log4j 2 setup can't parse. Ignore.
+- **Testcontainers `client version 1.32 is too old`** (Rancher Desktop) — add `api.version=1.43` to `~/.docker-java.properties` and `docker.host=unix:///Users/$USER/.rd/docker.sock` + `ryuk.disabled=true` to `~/.testcontainers.properties`, then `sudo ln -s /Users/$USER/.rd/docker.sock /var/run/docker.sock` so testcontainers' Unix strategy finds the socket.
+- **`spark_minio_trino` not found** — set `export SPARK_MINIO_TRINO_DIR=/path/to/spark_minio_trino` or symlink it as `../spark_minio_trino`.
+- **Port collisions on stack-up** (e.g. `Bind for 127.0.0.1:15432 failed`) — an ssh tunnel or another docker stack owns the port. Edit `lakehouse-override.yml` to move the offending port (the `!override` tag replaces the base compose's mapping cleanly).
+- **`Namespace does not exist: warehouse`** — the engine now `CREATE NAMESPACE IF NOT EXISTS` before the first table, so this should only appear if you overrode the target catalog to one that doesn't have the namespace and can't create it.
+- **`invalid value for parameter "TimeZone": "US/Pacific"`** — Postgres JDBC ships the JVM's default timezone to the server. `bin/warehouse-sync` pins `-Duser.timezone=UTC`. If you run `java -jar` directly, add the flag yourself.
+- **Trino says table doesn't exist** — check `warehouse-sync inspect`; a `NOOP` means no source rows since the last watermark.

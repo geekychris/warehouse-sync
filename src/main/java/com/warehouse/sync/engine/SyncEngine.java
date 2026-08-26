@@ -89,7 +89,10 @@ public class SyncEngine {
                     break;
                 }
                 Dataset<Row> enriched = enrich(batch.rows(), cfg, runId);
-                if (batchNum == 1) writer.ensureTable(spark, cfg, enriched);
+                if (batchNum == 1) {
+                    ensureNamespace(spark, cfg);
+                    writer.ensureTable(spark, cfg, enriched);
+                }
                 writer.write(spark, cfg, enriched);
 
                 watermark = batch.nextWatermark();
@@ -129,6 +132,19 @@ public class SyncEngine {
                 .withColumn(SyncEnvelope.INGESTED_DATE, lit(java.sql.Date.valueOf(LocalDate.now(ZoneOffset.UTC))))
                 .withColumn(SyncEnvelope.SOURCE_OP,     lit(op))
                 .withColumn(SyncEnvelope.BATCH_ID,      lit(batchId));
+    }
+
+    /**
+     * Ensure the target namespace (e.g. `iceberg.warehouse`) exists so
+     * subsequent CREATE TABLE calls don't fail. Idempotent.
+     */
+    private static void ensureNamespace(SparkSession spark, SyncConfig cfg) {
+        String qualifiedTable = cfg.getWarehouse().catalogQualifiedTable();
+        int lastDot = qualifiedTable.lastIndexOf('.');
+        if (lastDot > 0) {
+            String namespace = qualifiedTable.substring(0, lastDot);
+            spark.sql("CREATE NAMESPACE IF NOT EXISTS " + namespace);
+        }
     }
 
     private static String wmString(Watermark w) {

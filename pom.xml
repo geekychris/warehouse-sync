@@ -18,9 +18,13 @@
         <maven.compiler.target>11</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <spark.version>3.4.1</spark.version>
+        <!-- Spark 3.5.x is the first version to officially support running on JDK 21.
+             3.4.x throws NoSuchMethodException for the removed java.nio.DirectByteBuffer
+             constructor. If pinned to older Spark, use JDK 17 instead. -->
+        <spark.version>3.5.1</spark.version>
         <scala.binary.version>2.12</scala.binary.version>
-        <iceberg.version>1.4.2</iceberg.version>
+        <!-- Iceberg 1.6.x has the spark-runtime-3.5 artifact. -->
+        <iceberg.version>1.6.1</iceberg.version>
         <jackson.version>2.15.2</jackson.version>
         <postgres.version>42.7.1</postgres.version>
         <mysql.version>8.0.33</mysql.version>
@@ -30,7 +34,8 @@
         <slf4j.version>2.0.9</slf4j.version>
         <log4j.version>2.20.0</log4j.version>
         <junit.version>5.10.1</junit.version>
-        <testcontainers.version>1.20.6</testcontainers.version>
+        <testcontainers.version>1.21.3</testcontainers.version>
+        <docker.java.version>3.5.2</docker.java.version>
         <assertj.version>3.24.2</assertj.version>
     </properties>
 
@@ -50,8 +55,50 @@
         <!-- Iceberg + Hive catalog -->
         <dependency>
             <groupId>org.apache.iceberg</groupId>
-            <artifactId>iceberg-spark-runtime-3.4_${scala.binary.version}</artifactId>
+            <artifactId>iceberg-spark-runtime-3.5_${scala.binary.version}</artifactId>
             <version>${iceberg.version}</version>
+        </dependency>
+        <!-- Spark distributions ship Hive; when we run as `java -jar` we don't have
+             those on classpath, so bundle them. iceberg-hive-metastore adapts Iceberg
+             to Hive Thrift; hive-metastore provides the client classes it uses. -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-hive-metastore</artifactId>
+            <version>${iceberg.version}</version>
+            <exclusions>
+                <!-- Pulls log4j-slf4j-impl 2.6.2, incompatible with slf4j-api 2.x. -->
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.logging.log4j</groupId>
+                    <artifactId>log4j-web</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-metastore</artifactId>
+            <version>2.3.9</version>
+            <exclusions>
+                <!-- Silence the old log4j 1.x. -->
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-log4j12</artifactId></exclusion>
+                <exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion>
+                <!-- hive-common transitively pulls log4j-slf4j-impl 2.6.2 (slf4j 1.x
+                     era). Conflicts with our slf4j-api 2.x — a NoSuchMethodError on
+                     Log4jLoggerFactory constructor. Yank it. -->
+                <exclusion><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-slf4j-impl</artifactId></exclusion>
+                <!-- Hive 2.3.9 depends on the JDK 1.7 tools.jar (system-scope);
+                     JDK 21 doesn't ship it. We only need the Thrift client bits,
+                     not anything that touches javadoc/javac reflection. -->
+                <exclusion><groupId>jdk.tools</groupId><artifactId>jdk.tools</artifactId></exclusion>
+                <!-- Pulls a huge tree we don't need for client-side use. -->
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>hadoop-common</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>hadoop-hdfs</artifactId></exclusion>
+                <exclusion><groupId>org.apache.hadoop</groupId><artifactId>hadoop-mapreduce-client-core</artifactId></exclusion>
+                <exclusion><groupId>com.google.protobuf</groupId><artifactId>protobuf-java</artifactId></exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Hadoop-AWS for S3A -->
@@ -143,6 +190,27 @@
             <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- Force a newer docker-java. Testcontainers 1.21.x still bundles 3.4.x,
+             whose pre-negotiation ping hits /v1.32/ and Rancher rejects with API
+             version 1.32 too old (min 1.41). 3.5.x handles this correctly. -->
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-api</artifactId>
+            <version>${docker.java.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-core</artifactId>
+            <version>${docker.java.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.docker-java</groupId>
+            <artifactId>docker-java-transport-zerodep</artifactId>
+            <version>${docker.java.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
@@ -203,7 +271,29 @@
                     </environmentVariables>
                     <systemPropertyVariables>
                         <docker.host>${env.DOCKER_HOST}</docker.host>
+                        <!-- Postgres JDBC driver relays the JVM's default timezone via
+                             SET TIME ZONE. Java zone names like "US/Pacific" are not
+                             valid Postgres zones — pin to UTC. -->
+                        <user.timezone>UTC</user.timezone>
                     </systemPropertyVariables>
+                    <!-- Spark on JDK 17+ needs these opens; kept in one place. Matches
+                         bin/warehouse-sync so the ITs mirror runtime conditions. -->
+                    <argLine>
+                        --add-opens=java.base/java.lang=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens=java.base/java.io=ALL-UNNAMED
+                        --add-opens=java.base/java.net=ALL-UNNAMED
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                        --add-opens=java.base/java.util=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+                        --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+                        --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+                        --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+                        --add-opens=java.base/sun.security.action=ALL-UNNAMED
+                        --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+                        --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
+                    </argLine>
                 </configuration>
                 <executions>
                     <execution>

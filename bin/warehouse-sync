@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Launcher for the warehouse-sync fat jar.
+#
+# Adds the --add-opens flags Spark 3.5 needs on JDK 17+ (JDK 21 defaults
+# would otherwise reject sun.nio.ch access with an IllegalAccessError).
+# The full list matches Spark's own bin/spark-submit; keeping it here lets
+# `java -jar` work without users needing to remember the flags.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+JAR_PATTERN="$PROJECT_DIR/target/warehouse-sync-*-all.jar"
+JAR="$(ls -1 $JAR_PATTERN 2>/dev/null | head -1)"
+if [ -z "$JAR" ]; then
+    echo "ERROR: fat jar not found. Run: mvn -DskipTests package" >&2
+    exit 1
+fi
+
+JAVA_OPTS=(
+    # Pin JVM timezone to UTC. The Postgres JDBC driver relays the JVM's
+    # default timezone as SET TIME ZONE '<zone>' — Java zone names like
+    # "US/Pacific" are not valid Postgres timezones, causing FATAL errors.
+    -Duser.timezone=UTC
+    --add-opens=java.base/java.lang=ALL-UNNAMED
+    --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+    --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+    --add-opens=java.base/java.io=ALL-UNNAMED
+    --add-opens=java.base/java.net=ALL-UNNAMED
+    --add-opens=java.base/java.nio=ALL-UNNAMED
+    --add-opens=java.base/java.util=ALL-UNNAMED
+    --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+    --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+    --add-opens=java.base/sun.nio.ch=ALL-UNNAMED
+    --add-opens=java.base/sun.nio.cs=ALL-UNNAMED
+    --add-opens=java.base/sun.security.action=ALL-UNNAMED
+    --add-opens=java.base/sun.util.calendar=ALL-UNNAMED
+    --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
+)
+
+exec java "${JAVA_OPTS[@]}" ${WAREHOUSE_SYNC_JAVA_OPTS:-} -jar "$JAR" "$@"

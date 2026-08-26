@@ -1,16 +1,20 @@
 # Port-override for the shared spark_minio_trino lakehouse + a demo Postgres
 # 'source' database that this project syncs FROM (distinct from the Hive
-# metastore backing store at 15432).
+# metastore backing store).
 #
-# Bring up (from this directory):
+# Bring up (from this directory) — base compose FIRST so its own relative
+# paths (Dockerfile.hive-metastore) resolve; our compose uses ${PWD} for
+# volume mounts to sidestep docker compose's "relative to first -f" rule:
 #   docker compose -f ../spark_minio_trino/docker-compose.yml \
 #                  -f docker-compose.yml \
 #                  -f lakehouse-override.yml \
 #                  up -d
 #
 # Same port discipline as structured-logger (18000-range coordinated with
-# devportal). The one new addition is 15433 for the source Postgres — we
-# CANNOT reuse 15432 because that is claimed by the Hive metastore Postgres.
+# devportal). Uses Docker Compose 2.24's `!reset` tag to REPLACE the base
+# compose's port mappings rather than append to them — needed because this
+# machine has ssh tunnels bound to the default ports (9000/9001/5432/7077
+# etc.), so the base's `9000:9000` mapping would fight them.
 #
 # Host port map after this override:
 #   18000  → MinIO API           (container 9000)
@@ -19,32 +23,46 @@
 #   18077  → Spark master        (container 7077)
 #   18082  → Spark UI            (container 8080)
 #   18083  → Hive Metastore      (container 9083)
-#   15432  → metastore Postgres  (container 5432)   — DO NOT SYNC FROM THIS
-#   15433  → source Postgres     (container 5432)   — this is what we replicate
+#   15434  → metastore Postgres  (container 5432)
+#   15433  → source Postgres     (container 5432)
+#   18181  → Zookeeper           (container 2181)
+#   18092  → Kafka external      (container 9092) — not used by warehouse-sync
 
 services:
   minio:
-    ports:
+    ports: !override
       - "18000:9000"
       - "18001:9001"
 
   postgres:
-    ports:
-      - "15432:5432"
+    ports: !override
+      - "15434:5432"
 
   hive-metastore:
-    ports:
+    ports: !override
       - "18083:9083"
 
   spark-master:
-    ports:
+    ports: !override
       - "18082:8080"
       - "18077:7077"
 
+  spark-worker:
+    ports: !override []
+
+  zookeeper:
+    ports: !override
+      - "18181:2181"
+
+  kafka:
+    ports: !override
+      - "18092:9092"
+      - "29092:29092"
+
   trino:
-    ports:
+    ports: !override
       - "18013:8080"
 
   source-postgres:
-    ports:
+    ports: !override
       - "15433:5432"

@@ -98,15 +98,22 @@ warehouse-sync backfill        --config … --reset               # or --waterma
 
 ## Local dev
 
-Prereq: [spark_minio_trino](https://github.com/…) cloned as a sibling directory. If it lives elsewhere, `export SPARK_MINIO_TRINO_DIR=/path/to/it`.
+Prereqs:
+- Docker (Rancher Desktop / Docker Desktop / Colima)
+- JDK 11+ (JDK 21 tested; the launcher script adds required `--add-opens` for Spark 3.5)
+- Maven 3.9+
+- [spark_minio_trino](https://github.com/…) available at `../spark_minio_trino`, or `export SPARK_MINIO_TRINO_DIR=/path/to/it`
 
 ```bash
 ./scripts/start-stack.sh          # lakehouse + demo source-postgres
 mvn -DskipTests package           # builds target/warehouse-sync-0.1.0-all.jar
 ./scripts/seed-postgres.sh        # create some churn to replicate
-make dry-run CONFIG=sync-configs/users_sync.json
-make run     CONFIG=sync-configs/users_sync.json
-make inspect
+
+# Use the bin/warehouse-sync launcher (adds JDK 21 opens + UTC timezone).
+# Direct `java -jar` also works but you need to pass those flags yourself.
+./bin/warehouse-sync dry-run --config sync-configs/users_sync.json
+./bin/warehouse-sync run     --config sync-configs/                  # all three
+./bin/warehouse-sync inspect
 ./scripts/query-warehouse.sh iceberg "SELECT * FROM iceberg.warehouse.public_users LIMIT 10"
 ```
 
@@ -123,7 +130,14 @@ mvn test                # unit tests (16 tests, sub-second)
 mvn verify              # + integration tests (testcontainers → Postgres + Spark)
 ```
 
-Integration tests need a Docker daemon reachable at `$DOCKER_HOST` (or `~/.testcontainers.properties`). Rancher Desktop / Docker Desktop / Colima all fine.
+**19/19 pass locally on JDK 21 + Rancher Desktop.**
+
+Integration tests need a Docker daemon reachable at `$DOCKER_HOST` (or `~/.testcontainers.properties`). On Rancher Desktop specifically:
+- `~/.testcontainers.properties` needs `docker.host=unix:///Users/$USER/.rd/docker.sock`, `ryuk.disabled=true`
+- `~/.docker-java.properties` needs `api.version=1.43` (Rancher's daemon rejects docker-java's default `1.32` probe)
+- Symlink `/var/run/docker.sock` → `/Users/$USER/.rd/docker.sock` so testcontainers' Unix strategy finds it
+
+Docker Desktop and Colima work out of the box.
 
 ## Adding a new source type
 

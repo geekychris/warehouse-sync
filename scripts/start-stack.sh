@@ -16,6 +16,10 @@ fi
 cd "$PROJECT_DIR"
 
 echo "Bringing up shared lakehouse + source-postgres..."
+# Order: base spark_minio_trino compose first (so ITS relative paths like
+# ./Dockerfile.hive-metastore resolve inside that repo); our compose uses
+# ${PWD} for volume mounts to escape docker compose's "relative to first -f"
+# rule.
 docker compose \
     -f "$STACK_DIR/docker-compose.yml" \
     -f docker-compose.yml \

@@ -13,7 +13,10 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -46,6 +49,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * pinned in this pom).
  */
 @Testcontainers
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class PostgresJdbcIT {
 
     @Container
@@ -77,6 +81,7 @@ class PostgresJdbcIT {
     }
 
     @Test
+    @Order(1)
     void first_pull_returns_all_rows_and_advances_watermark() {
         SyncConfig cfg = buildConfig(WriteMode.APPEND_ONLY, "id", "long", 10);
         try (PostgresSource src = new PostgresSource(cfg)) {
@@ -88,6 +93,7 @@ class PostgresJdbcIT {
     }
 
     @Test
+    @Order(2)
     void incremental_pull_after_watermark_returns_only_new_rows() throws Exception {
         SyncConfig cfg = buildConfig(WriteMode.APPEND_ONLY, "id", "long", 10);
         // Read once to establish a watermark.
@@ -111,6 +117,7 @@ class PostgresJdbcIT {
     }
 
     @Test
+    @Order(3)
     void batch_size_caps_returned_rows() {
         SyncConfig cfg = buildConfig(WriteMode.APPEND_ONLY, "id", "long", 2);
         try (PostgresSource src = new PostgresSource(cfg)) {
