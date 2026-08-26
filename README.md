@@ -4,6 +4,14 @@ Metadata-driven incremental replication from operational databases (Postgres tod
 
 > **Status:** v0.1.0 — Postgres source, all three write modes, one-shot + daemon runtimes, Iceberg-backed watermark state, dry-run/inspect/backfill CLIs, JSON-Schema-validated configs, MySQL + Debezium source stubs proving the SPI seam.
 
+## Docs
+
+- **[QUICKSTART.md](QUICKSTART.md)** — zero to first row in the warehouse in five minutes.
+- **[DEMO.md](DEMO.md)** — walkthrough of the interactive playground and the one-shot demo. Read this if you want to see it doing something interesting.
+- **[RUNNING.md](RUNNING.md)** — every CLI subcommand, JVM/env setup, common workflows, cluster + cron + systemd deployment.
+- **[CONFIGURATION.md](CONFIGURATION.md)** — every config field explained, mode decision matrix, envelope columns, common gotchas, example gallery.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — engine internals, concurrency model, state store schema, comparison with structured-logger.
+
 ## Design at a glance
 
 ```
