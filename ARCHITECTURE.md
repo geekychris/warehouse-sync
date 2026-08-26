@@ -11,44 +11,51 @@ Two things are different from structured-logger:
 
 ## Runtime shape
 
+Component wiring:
+
+```mermaid
+flowchart TB
+    Config["sync-configs/*.json<br/><small>JSON Schema + structural rules</small>"]
+
+    subgraph Wiring["Loaded once per run"]
+        direction LR
+        Loader["ConfigLoader<br/>+ SyncConfig model"]
+        SourceReg["Source SPI registry<br/><small>ServiceLoader</small>"]
+        WriterFactory["WriterFactory<br/><small>3 impls</small>"]
+    end
+
+    Engine["SyncEngine loop"]
+    State[("IcebergStateStore<br/>sync_state.watermarks<br/>sync_state.run_history")]
+
+    Config --> Loader --> Engine
+    SourceReg --> Engine
+    WriterFactory --> Engine
+    Engine <--> State
 ```
-                                ┌─────────────────────────────┐
-                                │  sync-configs/*.json        │
-                                │  (validated by JSON Schema  │
-                                │   + structural rules)       │
-                                └──────────────┬──────────────┘
-                                               │
-                             ┌─────────────────┼──────────────────┐
-                             │                 │                  │
-                             ▼                 ▼                  ▼
-                    ┌────────────────┐  ┌────────────┐  ┌─────────────────┐
-                    │  ConfigLoader  │  │  Source    │  │  WarehouseWriter│
-                    │  + SyncConfig  │  │  SPI       │  │  (3 impls)      │
-                    │  model classes │  │  registry  │  │                 │
-                    └────────────────┘  └────────────┘  └─────────────────┘
-                                               │
-                                               ▼
-                    ┌───────────────────────────────────────────────────┐
-                    │                    SyncEngine                     │
-                    │                                                   │
-                    │  loop:                                            │
-                    │    wm = state.readWatermark(sync_id)              │
-                    │    batch = source.readBatch(wm)                   │
-                    │    if empty: record NOOP + exit                   │
-                    │    enrich(batch) with envelope columns            │
-                    │    writer.ensureTable() [first batch only]        │
-                    │    writer.write(batch)                            │
-                    │    state.advanceWatermark(max(batch.incr))        │
-                    │    state.recordRun(...)                           │
-                    │    if batch.size < batch_size: exit               │
-                    └───────────────┬───────────────────────────────────┘
-                                    │
-                                    ▼
-                    ┌───────────────────────────────────────────────────┐
-                    │              IcebergStateStore                    │
-                    │   iceberg.sync_state.watermarks                   │
-                    │   iceberg.sync_state.run_history (partitioned)    │
-                    └───────────────────────────────────────────────────┘
+
+Engine loop per config, per run:
+
+```mermaid
+flowchart TB
+    Start(["run(config)"])
+    ReadWM["wm = state.readWatermark(sync_id)"]
+    ReadBatch["batch = source.readBatch(wm)"]
+    Empty{{"batch.isEmpty?"}}
+    Noop["state.recordRun(NOOP)"]
+    ExitNoop(["exit NOOP"])
+    Enrich["enrich(batch) with envelope cols<br/><small>_sync_id, _sync_version, _ingested_at,<br/>_ingested_date, _source_op, _batch_id</small>"]
+    Ensure["writer.ensureTable()<br/><small>first batch only</small>"]
+    Write["writer.write(batch)"]
+    Advance["state.advanceWatermark(max(batch.incr))"]
+    Record["state.recordRun(OK|FAILED)"]
+    Drained{{"batch.size < batch_size?"}}
+    ExitOk(["exit OK"])
+
+    Start --> ReadWM --> ReadBatch --> Empty
+    Empty -- yes --> Noop --> ExitNoop
+    Empty -- no --> Enrich --> Ensure --> Write --> Advance --> Record --> Drained
+    Drained -- yes --> ExitOk
+    Drained -- no --> ReadBatch
 ```
 
 ## Data flow, per batch

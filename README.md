@@ -14,21 +14,35 @@ Metadata-driven incremental replication from operational databases (Postgres tod
 
 ## Design at a glance
 
-```
-sync-configs/*.json               ← metadata (source, target, mode, schedule)
-        │
-        ▼
-   warehouse-sync run          ────►  Postgres  ──JDBC──►  SyncEngine
-   warehouse-sync serve                                      │
-                                                             ▼
-                                                     [append_only |
-                                                        merge     |  Writer  ──► Iceberg
-                                                     full_replace]              (via Hive
-                                                             │                   metastore,
-                                                             ▼                   backed by
-                                                       IcebergStateStore         MinIO)
-                                                       (watermarks +
-                                                        run_history)
+```mermaid
+flowchart LR
+    Config["sync-configs/*.json<br/><small>source · mode · warehouse · schedule</small>"]
+
+    subgraph CLI["warehouse-sync CLI"]
+        Run["run <small>(one-shot)</small>"]
+        Serve["serve <small>(daemon)</small>"]
+    end
+
+    Postgres[("Postgres<br/>source table")]
+
+    subgraph Engine["SyncEngine"]
+        direction TB
+        WriterFactory{{"WriterFactory<br/>dispatched by mode"}}
+        Append["AppendOnlyWriter"]
+        Merge["MergeWriter"]
+        Full["FullRefreshWriter"]
+        WriterFactory --> Append & Merge & Full
+    end
+
+    Iceberg[("Iceberg tables<br/><small>Hive metastore + MinIO</small>")]
+    State[("sync_state<br/>watermarks · run_history")]
+
+    Config --> Run & Serve
+    Run & Serve -->|JDBC SELECT WHERE col > watermark| Postgres
+    Postgres --> Engine
+    Append & Merge & Full --> Iceberg
+    Engine -.records.-> State
+    State -.next watermark.-> Engine
 ```
 
 - **Source SPI** — one interface (`Source`), one config discriminator (`source.type`), ServiceLoader-discovered factories. Adding a new source type is one new class + one line in `META-INF/services`.
