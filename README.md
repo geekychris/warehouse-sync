@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Warehouse Sync logo" width="180">
+</p>
+
 # warehouse-sync
 
 Metadata-driven incremental replication from operational databases (Postgres today, MySQL/CDC pluggable) into an Apache Iceberg warehouse. Sister project to [structured-logger](../structured-logger/) — same lakehouse stack, same config-driven ethos, but reads from database tables instead of application log calls.
